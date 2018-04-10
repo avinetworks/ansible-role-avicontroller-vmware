@@ -2,4 +2,4 @@
 - hosts: localhost
   remote_user: root
   roles:
-    - avinetworks.avicontroller-vmware
+    - ansible-role-avicontroller-vmware
