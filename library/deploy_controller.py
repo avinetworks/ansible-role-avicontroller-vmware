@@ -86,6 +86,14 @@ def get_ds(dc, name):
     raise Exception("Failed to find %s on datacenter %s" % (name, dc.name))
 
 
+def get_sysadmin_key(keypath):
+    if os.path.exists(keypath):
+        with open(keypath, 'r') as keyfile:
+            data=keyfile.read().rstrip('\n')
+            return data
+    raise Exception('Failed to find sysadmin public key file at %s\n' % (keypath))
+
+
 def get_largest_free_ds(cl):
     """
     Pick the datastore that is accessible with the largest free space.
@@ -169,7 +177,12 @@ def main():
             power_on=dict(required=False, type='bool', default=True),
             vcenter_folder=dict(required=False, type='str'),
             ssl_verify=dict(required=False, type='bool', default=False),
-            state=dict(required=False, type='str', default='present')
+            state=dict(required=False, type='str', default='present'),
+            mgmt_ip=dict(required=False, type='str'),
+            mgmt_mask=dict(required=False, type='str'),
+            default_gw=dict(required=False, type='str'),
+            sysadmin_public_key=dict(required=False, type='str'),
+            props=dict(required=False, type='dict')
         ),
         supports_check_mode=True,
     )
@@ -270,6 +283,28 @@ def main():
                     module.params['mgmt_network']))
     else:
         command_tokens.append('--network=%s' % module.params['mgmt_network'])
+
+    if module.params.get('mgmt_ip', None):
+        command_tokens.append('--prop:%s=%s' % (
+            'avi.mgmt-ip.CONTROLLER', module.params['mgmt_ip']))
+
+    if module.params.get('mgmt_mask', None):
+        command_tokens.append('--prop:%s=%s' % (
+            'avi.mgmt-mask.CONTROLLER', module.params['mgmt_mask']))
+
+    if module.params.get('default_gw', None):
+        command_tokens.append('--prop:%s=%s' % (
+            'avi.default-gw.CONTROLLER', module.params['default_gw']))
+
+    if module.params.get('sysadmin_public_key', None):
+        command_tokens.append('--prop:%s=%s' % (
+            'avi.sysadmin-public-key.CONTROLLER',
+            get_sysadmin_key(module.params['sysadmin_public_key'])))
+
+    if module.params.get('props', None):
+        for key in module.params['props'].keys():
+            command_tokens.append(
+                '--prop:%s=%s' % (key, module.params['props'][key]))
 
     if 'vcenter_folder' in module.params and \
             module.params['vcenter_folder'] is not None:
