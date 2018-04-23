@@ -40,6 +40,33 @@ def get_dc(si, name):
     raise Exception('Failed to find datacenter named %s' % name)
 
 
+def compile_folder_path_for_object(vobj):
+    """ make a /vm/foo/bar/baz like folder path for an object """
+    paths = []
+    if isinstance(vobj, vim.Folder):
+        paths.append(vobj.name)
+
+    thisobj = vobj
+    while hasattr(thisobj, 'parent'):
+        thisobj = thisobj.parent
+        if isinstance(thisobj, vim.Folder):
+            paths.append(thisobj.name)
+    paths.reverse()
+    if paths[0] == 'Datacenters':
+        paths.remove('Datacenters')
+    return '/' + '/'.join(paths)
+
+
+def get_folder_by_path(si, dc, path):
+    container = si.content.viewManager.CreateContainerView(
+        dc, [vim.Folder], True)
+    for managed_object_ref in container.view:
+        if managed_object_ref.name == path.split("/")[-1:][0]:
+            if path in compile_folder_path_for_object(managed_object_ref):
+                return managed_object_ref
+    return None
+
+
 def get_cluster(si, dc, name):
     """
     Get a cluster in the datacenter by its names.
@@ -89,9 +116,9 @@ def get_ds(dc, name):
 def get_sysadmin_key(keypath):
     if os.path.exists(keypath):
         with open(keypath, 'r') as keyfile:
-            data=keyfile.read().rstrip('\n')
+            data = keyfile.read().rstrip('\n')
             return data
-    raise Exception('Failed to find sysadmin public key file at %s\n' % (keypath))
+    raise Exception('Failed to find sysadmin public key file at %s\n' % keypath)
 
 
 def get_largest_free_ds(cl):
@@ -160,6 +187,15 @@ def wait_for_tasks(service_instance, tasks):
             pcfilter.Destroy()
 
 
+def get_vm_ips(target_vm):
+    ip_address = []
+    for nic in target_vm.guest.net:
+        addresses = nic.ipConfig.ipAddress
+        for adr in addresses:
+            ip_address.append(adr.ipAddress)
+    return ip_address
+
+
 def main():
     module = AnsibleModule(
         argument_spec=dict(
@@ -182,7 +218,7 @@ def main():
             mgmt_mask=dict(required=False, type='str'),
             default_gw=dict(required=False, type='str'),
             sysadmin_public_key=dict(required=False, type='str'),
-            props=dict(required=False, type='dict')
+            ovf_properties=dict(required=False, type='dict')
         ),
         supports_check_mode=True,
     )
@@ -237,8 +273,48 @@ def main():
         ds = get_largest_free_ds(cl)
 
     if is_vm_exist(si, cl, module.params['vm_name']):
-        module.exit_json(msg='A VM with the name %s is already present' % (
-            module.params['vm_name']))
+        vm = get_vm_by_name(si, module.params['vm_name'])
+        vm_path = compile_folder_path_for_object(vm)
+        folder = get_folder_by_path(si, dc, module.params['vcenter_folder'])
+        folder_path = compile_folder_path_for_object(folder)
+        changed = False
+        if vm_path != folder_path:
+            # migrate vm to new folder
+            if not check_mode:
+                folder.MoveInto([vm])
+            changed = True
+        if (not module.params['power_on']) and \
+                vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
+            if not check_mode:
+                task = vm.PowerOffVM_Task()
+                wait_for_tasks(si, [task])
+            changed = True
+        if module.params['power_on'] and vm.runtime.powerState == \
+                vim.VirtualMachinePowerState.poweredOff:
+            if not check_mode:
+                task = vm.PowerOnVM_Task()
+                wait_for_tasks(si, [task])
+            changed = True
+
+        if module.params.get('datastore', None):
+            ds_names = []
+            for datastore in vm.datastore:
+                ds_names.append(datastore.name)
+            if ds.name not in ds_names:
+                module.fail_json(msg='VM datastore cant be modified')
+
+        if module.params.get('mgmt_ip', None):
+            ip_addresses = get_vm_ips(vm)
+            if ip_addresses and not module.params['mgmt_ip'] in ip_addresses:
+                module.fail_json(msg='VM static ip address cant be modified')
+        if changed and not check_mode:
+            module.exit_json(msg='A VM with the name %s updated successfully' %
+                                 (module.params['vm_name']), changed=True)
+        if changed and check_mode:
+            module.exit_json(changed=True)
+        else:
+            module.exit_json(msg='A VM with the name %s is already present' % (
+                module.params['vm_name']))
 
     if not os.path.isfile(
             module.params['controller_ova_path']) or \
