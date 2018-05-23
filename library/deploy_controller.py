@@ -196,6 +196,36 @@ def get_vm_ips(target_vm):
     return ip_address
 
 
+def is_update_cpu(module):
+    return ('number_of_cpus' in module.params and
+            module.params['number_of_cpus'] is not None)
+
+
+def is_update_memory(module):
+    return 'memory' in module.params and module.params['memory'] is not None
+
+
+def is_reserve_memory(module):
+    return ('memory_reserved' in module.params and
+            module.params['memory_reserved'] is not None)
+
+
+def is_reserve_cpu(module):
+    return ('cpu_reserved' in module.params and
+            module.params['cpu_reserved'] is not None)
+
+
+def is_resize_disk(module):
+    return ('disk_size' in module.params and
+            module.params['disk_size'] is not None)
+
+
+def is_reconfigure_vm(module):
+    return (is_update_cpu(module) or is_update_memory(module) or
+            is_reserve_memory(module)or is_reserve_cpu(module) or
+            is_resize_disk(module))
+
+
 def main():
     module = AnsibleModule(
         argument_spec=dict(
@@ -218,6 +248,11 @@ def main():
             mgmt_mask=dict(required=False, type='str'),
             default_gw=dict(required=False, type='str'),
             sysadmin_public_key=dict(required=False, type='str'),
+            number_of_cpus=dict(required=False, type='int'),
+            cpu_reserved=dict(required=False, type='int'),
+            memory=dict(required=False, type='int'),
+            memory_reserved=dict(required=False, type='int'),
+            disk_size=dict(required=False, type='int'),
             ovf_properties=dict(required=False, type='dict')
         ),
         supports_check_mode=True,
@@ -330,7 +365,7 @@ def main():
     vi_string += '/%s/host/%s' % (dc.name, cl.name)
     command_tokens = [ovftool_exec]
 
-    if module.params['power_on']:
+    if module.params['power_on'] and not is_reconfigure_vm(module):
         command_tokens.append('--powerOn')
     if not module.params['ssl_verify']:
         command_tokens.append('--noSSLVerify')
@@ -382,8 +417,8 @@ def main():
             command_tokens.append(
                 '--prop:%s=%s' % (key, module.params['props'][key]))
 
-    if 'vcenter_folder' in module.params and \
-            module.params['vcenter_folder'] is not None:
+    if ('vcenter_folder' in module.params and
+            module.params['vcenter_folder'] is not None):
         command_tokens.append('--vmFolder=%s' % module.params['vcenter_folder'])
 
     command_tokens.extend([ova_file, vi_string])
@@ -391,8 +426,37 @@ def main():
 
     if ova_tool_result[0] != 0:
         return module.fail_json(
-            msg='Failed to deploy OVA, error message from ovftool is: %s' %
-                ova_tool_result[1])
+            msg='Failed to deploy OVA, error message from ovftool is: %s for command %s' %
+                (ova_tool_result[1], command_tokens))
+
+    if is_reconfigure_vm(module):
+        vm = get_vm_by_name(si, module.params['vm_name'])
+        cspec = vim.vm.ConfigSpec()
+        if is_update_cpu(module):
+            cspec.numCPUs = module.params['number_of_cpus']
+        if is_update_memory(module):
+            cspec.memoryMB = module.params['memory']
+        if is_reserve_memory(module):
+            cspec.memoryAllocation = vim.ResourceAllocationInfo(
+                reservation=module.params['memory_reserved'])
+        if is_reserve_cpu(module):
+            cspec.cpuAllocation = vim.ResourceAllocationInfo(
+                reservation=module.params['cpu_reserved'])
+        if is_resize_disk(module):
+            disk = None
+            for device in vm.config.hardware.device:
+                if isinstance(device, vim.vm.device.VirtualDisk):
+                    disk = device
+                    break
+            if disk is not None:
+                disk.capacityInKB = module.params['disk_size'] * 1024 * 1024
+                devSpec = vim.vm.device.VirtualDeviceSpec(
+                    device=disk, operation="edit")
+                cspec.deviceChange.append(devSpec)
+        wait_for_tasks(si, [vm.Reconfigure(cspec)])
+
+        task = vm.PowerOnVM_Task()
+        wait_for_tasks(si, [task])
 
     return module.exit_json(changed=True, ova_tool_result=ova_tool_result)
 
