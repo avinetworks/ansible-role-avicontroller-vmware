@@ -197,27 +197,28 @@ def get_vm_ips(target_vm):
 
 
 def is_update_cpu(module):
-    return ('number_of_cpus' in module.params and
-            module.params['number_of_cpus'] is not None)
+    return ('con_number_of_cpus' in module.params and
+            module.params['con_number_of_cpus'] is not None)
 
 
 def is_update_memory(module):
-    return 'memory' in module.params and module.params['memory'] is not None
+    return ('con_memory' in module.params and
+            module.params['con_memory'] is not None)
 
 
 def is_reserve_memory(module):
-    return ('memory_reserved' in module.params and
-            module.params['memory_reserved'] is not None)
+    return ('con_memory_reserved' in module.params and
+            module.params['con_memory_reserved'] is not None)
 
 
 def is_reserve_cpu(module):
-    return ('cpu_reserved' in module.params and
-            module.params['cpu_reserved'] is not None)
+    return ('con_cpu_reserved' in module.params and
+            module.params['con_cpu_reserved'] is not None)
 
 
 def is_resize_disk(module):
-    return ('disk_size' in module.params and
-            module.params['disk_size'] is not None)
+    return ('con_disk_size' in module.params and
+            module.params['con_disk_size'] is not None)
 
 
 def is_reconfigure_vm(module):
@@ -233,27 +234,27 @@ def main():
             vcenter_host=dict(required=True, type='str'),
             vcenter_user=dict(required=True, type='str'),
             vcenter_password=dict(required=True, type='str', no_log=True),
-            datacenter=dict(required=False, type='str'),
-            cluster=dict(required=False, type='str'),
-            datastore=dict(required=False, type='str'),
-            mgmt_network=dict(required=True, type='str'),
-            disk_mode=dict(required=False, type='str', default='thin'),
-            controller_ova_path=dict(required=True, type='str'),
-            vm_name=dict(required=True, type='str'),
-            power_on=dict(required=False, type='bool', default=True),
-            vcenter_folder=dict(required=False, type='str'),
             ssl_verify=dict(required=False, type='bool', default=False),
             state=dict(required=False, type='str', default='present'),
-            mgmt_ip=dict(required=False, type='str'),
-            mgmt_mask=dict(required=False, type='str'),
-            default_gw=dict(required=False, type='str'),
-            sysadmin_public_key=dict(required=False, type='str'),
-            number_of_cpus=dict(required=False, type='int'),
-            cpu_reserved=dict(required=False, type='int'),
-            memory=dict(required=False, type='int'),
-            memory_reserved=dict(required=False, type='int'),
-            disk_size=dict(required=False, type='int'),
-            ovf_properties=dict(required=False, type='dict')
+            con_datacenter=dict(required=False, type='str'),
+            con_cluster=dict(required=False, type='str'),
+            con_datastore=dict(required=False, type='str'),
+            con_mgmt_network=dict(required=True, type='str'),
+            con_disk_mode=dict(required=False, type='str', default='thin'),
+            con_ova_path=dict(required=True, type='str'),
+            con_vm_name=dict(required=True, type='str'),
+            con_power_on=dict(required=False, type='bool', default=True),
+            con_vcenter_folder=dict(required=False, type='str'),
+            con_mgmt_ip=dict(required=False, type='str'),
+            con_mgmt_mask=dict(required=False, type='str'),
+            con_default_gw=dict(required=False, type='str'),
+            con_sysadmin_public_key=dict(required=False, type='str'),
+            con_number_of_cpus=dict(required=False, type='int'),
+            con_cpu_reserved=dict(required=False, type='int'),
+            con_memory=dict(required=False, type='int'),
+            con_memory_reserved=dict(required=False, type='int'),
+            con_disk_size=dict(required=False, type='int'),
+            con_ovf_properties=dict(required=False, type='dict')
         ),
         supports_check_mode=True,
     )
@@ -272,15 +273,15 @@ def main():
                 'FQDN or IP')
     check_mode = module.check_mode
     if module.params['state'] == 'absent':
-        vm = get_vm_by_name(si, module.params['vm_name'])
+        vm = get_vm_by_name(si, module.params['con_vm_name'])
 
         if vm is None:
             return module.exit_json(msg='A VM with the name %s not found' % (
-                module.params['vm_name']))
+                module.params['con_vm_name']))
 
         if check_mode:
             return module.exit_json(msg='A VM with the name %s found' % (
-                module.params['vm_name']), changed=True)
+                module.params['con_vm_name']), changed=True)
 
         if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
             task = vm.PowerOffVM_Task()
@@ -290,27 +291,27 @@ def main():
         wait_for_tasks(si, [task])
 
         return module.exit_json(msg='A VM with the name %s deleted successfully'
-                                    % (module.params['vm_name']))
+                                    % (module.params['con_vm_name']))
 
-    if module.params.get('datacenter', None):
-        dc = get_dc(si, module.params['datacenter'])
+    if module.params.get('con_datacenter', None):
+        dc = get_dc(si, module.params['con_datacenter'])
     else:
         dc = si.content.rootFolder.childEntity[0]
 
-    if module.params.get('cluster', None):
-        cl = get_cluster(si, dc, module.params['cluster'])
+    if module.params.get('con_cluster', None):
+        cl = get_cluster(si, dc, module.params['con_cluster'])
     else:
         cl = get_first_cluster(si, dc)
 
-    if module.params.get('datastore', None):
-        ds = get_ds(cl, module.params['datastore'])
+    if module.params.get('con_datastore', None):
+        ds = get_ds(cl, module.params['con_datastore'])
     else:
         ds = get_largest_free_ds(cl)
 
-    if is_vm_exist(si, cl, module.params['vm_name']):
-        vm = get_vm_by_name(si, module.params['vm_name'])
+    if is_vm_exist(si, cl, module.params['con_vm_name']):
+        vm = get_vm_by_name(si, module.params['con_vm_name'])
         vm_path = compile_folder_path_for_object(vm)
-        folder = get_folder_by_path(si, dc, module.params['vcenter_folder'])
+        folder = get_folder_by_path(si, dc, module.params['con_vcenter_folder'])
         folder_path = compile_folder_path_for_object(folder)
         changed = False
         if vm_path != folder_path:
@@ -318,46 +319,47 @@ def main():
             if not check_mode:
                 folder.MoveInto([vm])
             changed = True
-        if (not module.params['power_on']) and \
+        if (not module.params['con_power_on']) and \
                 vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
             if not check_mode:
                 task = vm.PowerOffVM_Task()
                 wait_for_tasks(si, [task])
             changed = True
-        if module.params['power_on'] and vm.runtime.powerState == \
+        if module.params['con_power_on'] and vm.runtime.powerState == \
                 vim.VirtualMachinePowerState.poweredOff:
             if not check_mode:
                 task = vm.PowerOnVM_Task()
                 wait_for_tasks(si, [task])
             changed = True
 
-        if module.params.get('datastore', None):
+        if module.params.get('con_datastore', None):
             ds_names = []
             for datastore in vm.datastore:
                 ds_names.append(datastore.name)
             if ds.name not in ds_names:
                 module.fail_json(msg='VM datastore cant be modified')
 
-        if module.params.get('mgmt_ip', None):
+        if module.params.get('con_mgmt_ip', None):
             ip_addresses = get_vm_ips(vm)
-            if ip_addresses and not module.params['mgmt_ip'] in ip_addresses:
+            if (ip_addresses and
+                    not module.params['con_mgmt_ip'] in ip_addresses):
                 module.fail_json(msg='VM static ip address cant be modified')
         if changed and not check_mode:
             module.exit_json(msg='A VM with the name %s updated successfully' %
-                                 (module.params['vm_name']), changed=True)
+                                 (module.params['con_vm_name']), changed=True)
         if changed and check_mode:
             module.exit_json(changed=True)
         else:
-            module.exit_json(msg='A VM with the name %s is already present' % (
-                module.params['vm_name']))
+            module.exit_json(
+                msg='A VM with the name %s is already present' % (
+                    module.params['con_vm_name']))
 
-    if not os.path.isfile(
-            module.params['controller_ova_path']) or \
-            not os.access(module.params['controller_ova_path'], os.R_OK):
+    if (not os.path.isfile(module.params['con_ova_path']) or
+            not os.access(module.params['con_ova_path'], os.R_OK)):
         module.fail_json(msg='Controller OVA not found or not readable')
 
     ovftool_exec = '%s/ovftool' % module.params['ovftool_path']
-    ova_file = module.params['controller_ova_path']
+    ova_file = module.params['con_ova_path']
     quoted_vcenter_user = urllib.quote(module.params['vcenter_user'])
     vi_string = 'vi://%s:%s@%s' % (
         quoted_vcenter_user, module.params['vcenter_password'],
@@ -365,7 +367,7 @@ def main():
     vi_string += '/%s/host/%s' % (dc.name, cl.name)
     command_tokens = [ovftool_exec]
 
-    if module.params['power_on'] and not is_reconfigure_vm(module):
+    if module.params['con_power_on'] and not is_reconfigure_vm(module):
         command_tokens.append('--powerOn')
     if not module.params['ssl_verify']:
         command_tokens.append('--noSSLVerify')
@@ -375,14 +377,14 @@ def main():
         '--acceptAllEulas',
         '--skipManifestCheck',
         '--allowExtraConfig',
-        '--diskMode=%s' % module.params['disk_mode'],
+        '--diskMode=%s' % module.params['con_disk_mode'],
         '--datastore=%s' % ds.name,
-        '--name=%s' % module.params['vm_name']
+        '--name=%s' % module.params['con_vm_name']
     ])
 
-    if 'ovf_network_name' in module.params.keys() and \
-            module.params['ovf_network_name'] is not None and len(
-                module.params['ovf_network_name']) > 0:
+    if ('ovf_network_name' in module.params.keys() and
+            module.params['ovf_network_name'] is not None and
+            len(module.params['ovf_network_name']) > 0):
             try:
                 d = json.loads(
                     module.params['ovf_network_name'].replace("'", "\""))
@@ -391,57 +393,60 @@ def main():
             except ValueError:
                 command_tokens.append('--net:%s=%s' % (
                     module.params['ovf_network_name'],
-                    module.params['mgmt_network']))
+                    module.params['con_mgmt_network']))
     else:
-        command_tokens.append('--network=%s' % module.params['mgmt_network'])
+        command_tokens.append(
+            '--network=%s' % module.params['con_mgmt_network'])
 
-    if module.params.get('mgmt_ip', None):
+    if module.params.get('con_mgmt_ip', None):
         command_tokens.append('--prop:%s=%s' % (
-            'avi.mgmt-ip.CONTROLLER', module.params['mgmt_ip']))
+            'avi.mgmt-ip.CONTROLLER', module.params['con_mgmt_ip']))
 
-    if module.params.get('mgmt_mask', None):
+    if module.params.get('con_mgmt_mask', None):
         command_tokens.append('--prop:%s=%s' % (
-            'avi.mgmt-mask.CONTROLLER', module.params['mgmt_mask']))
+            'avi.mgmt-mask.CONTROLLER', module.params['con_mgmt_mask']))
 
-    if module.params.get('default_gw', None):
+    if module.params.get('con_default_gw', None):
         command_tokens.append('--prop:%s=%s' % (
-            'avi.default-gw.CONTROLLER', module.params['default_gw']))
+            'avi.default-gw.CONTROLLER', module.params['con_default_gw']))
 
-    if module.params.get('sysadmin_public_key', None):
+    if module.params.get('con_sysadmin_public_key', None):
         command_tokens.append('--prop:%s=%s' % (
             'avi.sysadmin-public-key.CONTROLLER',
-            get_sysadmin_key(module.params['sysadmin_public_key'])))
+            get_sysadmin_key(module.params['con_sysadmin_public_key'])))
 
-    if module.params.get('props', None):
-        for key in module.params['props'].keys():
+    if module.params.get('con_ovf_properties', None):
+        for key in module.params['con_ovf_properties'].keys():
             command_tokens.append(
-                '--prop:%s=%s' % (key, module.params['props'][key]))
+                '--prop:%s=%s' % (
+                    key, module.params['con_ovf_properties'][key]))
 
-    if ('vcenter_folder' in module.params and
-            module.params['vcenter_folder'] is not None):
-        command_tokens.append('--vmFolder=%s' % module.params['vcenter_folder'])
+    if ('con_vcenter_folder' in module.params and
+            module.params['con_vcenter_folder'] is not None):
+        command_tokens.append(
+            '--vmFolder=%s' % module.params['con_vcenter_folder'])
 
     command_tokens.extend([ova_file, vi_string])
     ova_tool_result = module.run_command(command_tokens)
 
     if ova_tool_result[0] != 0:
         return module.fail_json(
-            msg='Failed to deploy OVA, error message from ovftool is: %s for command %s' %
-                (ova_tool_result[1], command_tokens))
+            msg='Failed to deploy OVA, error message from ovftool is: %s '
+                'for command %s' % (ova_tool_result[1], command_tokens))
 
     if is_reconfigure_vm(module):
-        vm = get_vm_by_name(si, module.params['vm_name'])
+        vm = get_vm_by_name(si, module.params['con_vm_name'])
         cspec = vim.vm.ConfigSpec()
         if is_update_cpu(module):
-            cspec.numCPUs = module.params['number_of_cpus']
+            cspec.numCPUs = module.params['con_number_of_cpus']
         if is_update_memory(module):
-            cspec.memoryMB = module.params['memory']
+            cspec.memoryMB = module.params['con_memory']
         if is_reserve_memory(module):
             cspec.memoryAllocation = vim.ResourceAllocationInfo(
-                reservation=module.params['memory_reserved'])
+                reservation=module.params['con_memory_reserved'])
         if is_reserve_cpu(module):
             cspec.cpuAllocation = vim.ResourceAllocationInfo(
-                reservation=module.params['cpu_reserved'])
+                reservation=module.params['con_cpu_reserved'])
         if is_resize_disk(module):
             disk = None
             for device in vm.config.hardware.device:
@@ -449,7 +454,7 @@ def main():
                     disk = device
                     break
             if disk is not None:
-                disk.capacityInKB = module.params['disk_size'] * 1024 * 1024
+                disk.capacityInKB = module.params['con_disk_size'] * 1024 * 1024
                 devSpec = vim.vm.device.VirtualDeviceSpec(
                     device=disk, operation="edit")
                 cspec.deviceChange.append(devSpec)
