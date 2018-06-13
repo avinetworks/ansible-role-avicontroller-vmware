@@ -2,7 +2,10 @@
 
 import atexit
 import json
-import urllib
+try:
+    from urllib import quote
+except ImportError:
+    from urllib.parse import quote
 import os
 import requests
 from pyVim.connect import SmartConnectNoSSL, Disconnect
@@ -360,7 +363,7 @@ def main():
 
     ovftool_exec = '%s/ovftool' % module.params['ovftool_path']
     ova_file = module.params['con_ova_path']
-    quoted_vcenter_user = urllib.quote(module.params['vcenter_user'])
+    quoted_vcenter_user = quote(module.params['vcenter_user'])
     vi_string = 'vi://%s:%s@%s' % (
         quoted_vcenter_user, module.params['vcenter_password'],
         module.params['vcenter_host'])
