@@ -1,2 +1,7 @@
 ---
 # tasks file for avicontroller-vmware
+- name: Check ansible version
+  when:
+    - ansible_version.full is version_compare('2.4', '<')
+  debug: msg="This role works best with ansible version 2.4 or grater. It is recomended to use latest ansible versions for best experiance."
+
