@@ -8,6 +8,9 @@ import requests
 from pyVim.connect import SmartConnectNoSSL, Disconnect
 from ansible.module_utils.basic import *
 from pyVmomi import vim, vmodl
+from time import sleep
+import requests
+from requests.exceptions import ConnectionError
 
 __author__ = 'chaitanyaavi'
 
@@ -225,6 +228,24 @@ def is_reconfigure_vm(module):
     return (is_update_cpu(module) or is_update_memory(module) or
             is_reserve_memory(module)or is_reserve_cpu(module) or
             is_resize_disk(module))
+
+def controller_wait(controller_ip):
+    login_url = "https://%s/#!/login" %(controller_ip)
+    #Waiting for 1 hour. Mean while retrying after every 3 seconds.
+    count = 0
+    while count < 1200:
+        print count
+        try:
+            res = requests.get(login_url, verify=False, timeout=3)
+            if res.status_code in [503, 502]:
+                sleep(3)
+                count += 1
+            else:
+                return True
+        except:
+            count += 1
+
+    return False
 
 
 def main():
@@ -463,6 +484,7 @@ def main():
         task = vm.PowerOnVM_Task()
         wait_for_tasks(si, [task])
 
+    controller_wait(module.params['con_mgmt_ip'])
     return module.exit_json(changed=True, ova_tool_result=ova_tool_result)
 
 
