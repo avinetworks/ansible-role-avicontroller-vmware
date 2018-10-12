@@ -8,9 +8,11 @@ except ImportError:
     from urllib.parse import quote
 import os
 import requests
+import time
 from pyVim.connect import SmartConnectNoSSL, Disconnect
 from ansible.module_utils.basic import *
 from pyVmomi import vim, vmodl
+
 
 __author__ = 'chaitanyaavi'
 
@@ -228,6 +230,33 @@ def is_reconfigure_vm(module):
     return (is_update_cpu(module) or is_update_memory(module) or
             is_reserve_memory(module)or is_reserve_cpu(module) or
             is_resize_disk(module))
+
+
+def controller_wait(controller_ip):
+    """
+    It waits for controller to come up for certain time (1 hour).
+    :return: controller_up: Boolean value for controller up state.
+    """
+    count = 0
+    path = "https://" + str(controller_ip)
+    ctrl_status = False
+    while True:
+        if count >= 720:
+            break
+        try:
+            r = requests.get(path, timeout=10, verify=False)
+            # Check for controller response for login URI. Time out is 720 * 5 Sec = 3600 Sec
+            if r.status_code in (500, 502, 503) and count < 720:
+                time.sleep(5)
+                count += 1
+            else:
+                ctrl_status = True
+                break
+        except (requests.Timeout, requests.exceptions.ConnectionError) as e:
+            time.sleep(5)
+            count += 1
+            pass
+    return ctrl_status
 
 
 def main():
@@ -466,6 +495,11 @@ def main():
         task = vm.PowerOnVM_Task()
         wait_for_tasks(si, [task])
 
+    # Wait for controller to come up for max 1 hour timeout
+    controller_up = controller_wait(module.params['con_mgmt_ip'])
+    if not controller_up:
+        return module.fail_json(
+            msg='Something wrong with the controller. The Controller is not in up state.')
     return module.exit_json(changed=True, ova_tool_result=ova_tool_result)
 
 
