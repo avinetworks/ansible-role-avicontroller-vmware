@@ -239,8 +239,9 @@ def controller_wait(controller_ip, round_wait=10, wait_time=3600):
     """
     count = 0
     max_count = wait_time / round_wait
-    path = "https://" + str(controller_ip)
+    path = "http://" + str(controller_ip) + "/api/cluster/runtime"
     ctrl_status = False
+    r = None
     while True:
         if count >= max_count:
             break
@@ -251,11 +252,14 @@ def controller_wait(controller_ip, round_wait=10, wait_time=3600):
                 time.sleep(10)
                 count += 1
             else:
-                ctrl_status = True
-                break
+                if r:
+                    data = r.json()
+                    cluster_state = data.get('cluster_state', '')
+                    if cluster_state:
+                        if cluster_state['state'] == 'CLUSTER_UP_NO_HA':
+                            ctrl_status = True
+                            break
         except (requests.Timeout, requests.exceptions.ConnectionError) as e:
-            time.sleep(10)
-            count += 1
             pass
     return ctrl_status
 
@@ -501,8 +505,8 @@ def main():
         wait_for_tasks(si, [task])
 
     # Wait for controller to come up for given con_wait_time
-    controller_up = controller_wait(module.params['con_mgmt_ip'], module.params['con_wait_time'],
-                                    module.params['round_wait'])
+    controller_up = controller_wait(module.params['con_mgmt_ip'], module.params['round_wait'],
+                                    module.params['con_wait_time'])
     if not controller_up:
         return module.fail_json(
             msg='Something wrong with the controller. The Controller is not in the up state.')
