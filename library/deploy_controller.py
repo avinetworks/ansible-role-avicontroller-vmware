@@ -10,7 +10,7 @@ import os
 import requests
 import time
 from pyVim.connect import SmartConnectNoSSL, Disconnect
-from ansible.module_utils.basic import *
+from ansible.module_utils.basic import AnsibleModule, AnsibleFallbackNotFound
 from pyVmomi import vim, vmodl
 
 

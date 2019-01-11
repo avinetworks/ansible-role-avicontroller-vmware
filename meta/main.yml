@@ -34,15 +34,15 @@ galaxy_info:
   # platforms is a list of platforms, and each platform has a name and a list of versions.
   #
   platforms:
-  - name: EL
-    versions:
-    - 6
-    - 7
-  - name: Ubuntu
-    versions:
-    - precise
-    - trusty
-    - xenial
+    - name: EL
+      versions:
+        - 6
+        - 7
+    - name: Ubuntu
+      versions:
+        - precise
+        - trusty
+        - xenial
 
   galaxy_tags:
     # List tags for your role here, one per line. A tag is a keyword that describes
