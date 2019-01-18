@@ -395,9 +395,13 @@ def main():
                 msg='A VM with the name %s is already present' % (
                     module.params['con_vm_name']))
 
-    if (not os.path.isfile(module.params['con_ova_path']) or
-            not os.access(module.params['con_ova_path'], os.R_OK)):
-        module.fail_json(msg='Controller OVA not found or not readable')
+    if (module.params['con_ova_path'].startswith('http')):
+        if (requests.head(module.params['con_ova_path']).status_code != 200):
+                module.fail_json(msg='Controller OVA not found or readable from specified URL path')
+    else:
+        if (not os.path.isfile(module.params['con_ova_path']) or
+                not os.access(module.params['con_ova_path'], os.R_OK)):
+                module.fail_json(msg='Controller OVA not found or not readable')
 
     ovftool_exec = '%s/ovftool' % module.params['ovftool_path']
     ova_file = module.params['con_ova_path']
