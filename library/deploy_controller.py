@@ -2,12 +2,17 @@
 
 import atexit
 import json
-import urllib
+try:
+    from urllib import quote
+except ImportError:
+    from urllib.parse import quote
 import os
 import requests
+import time
 from pyVim.connect import SmartConnectNoSSL, Disconnect
-from ansible.module_utils.basic import *
+from ansible.module_utils.basic import AnsibleModule
 from pyVmomi import vim, vmodl
+
 
 __author__ = 'chaitanyaavi'
 
@@ -227,6 +232,38 @@ def is_reconfigure_vm(module):
             is_resize_disk(module))
 
 
+def controller_wait(controller_ip, round_wait=10, wait_time=3600):
+    """
+    It waits for controller to come up for a given wait_time (default 1 hour).
+    :return: controller_up: Boolean value for controller up state.
+    """
+    count = 0
+    max_count = wait_time / round_wait
+    path = "http://" + str(controller_ip) + "/api/cluster/runtime"
+    ctrl_status = False
+    r = None
+    while True:
+        if count >= max_count:
+            break
+        try:
+            r = requests.get(path, timeout=10, verify=False)
+            # Check for controller response for login URI.
+            if r.status_code in (500, 502, 503) and count < max_count:
+                time.sleep(10)
+                count += 1
+            else:
+                if r:
+                    data = r.json()
+                    cluster_state = data.get('cluster_state', '')
+                    if cluster_state:
+                        if cluster_state['state'] == 'CLUSTER_UP_NO_HA':
+                            ctrl_status = True
+                            break
+        except (requests.Timeout, requests.exceptions.ConnectionError) as e:
+            pass
+    return ctrl_status
+
+
 def main():
     module = AnsibleModule(
         argument_spec=dict(
@@ -254,7 +291,11 @@ def main():
             con_memory=dict(required=False, type='int'),
             con_memory_reserved=dict(required=False, type='int'),
             con_disk_size=dict(required=False, type='int'),
-            con_ovf_properties=dict(required=False, type='dict')
+            con_ovf_properties=dict(required=False, type='dict'),
+            # Max time to wait for controller up state
+            con_wait_time=dict(required=False, type='int', default=3600),
+            # Retry after every rount_wait time to check for controller state.
+            round_wait=dict(required=False, type='int', default=10),
         ),
         supports_check_mode=True,
     )
@@ -354,9 +395,13 @@ def main():
                 msg='A VM with the name %s is already present' % (
                     module.params['con_vm_name']))
 
-    if (not os.path.isfile(module.params['con_ova_path']) or
-            not os.access(module.params['con_ova_path'], os.R_OK)):
-        module.fail_json(msg='Controller OVA not found or not readable')
+    if (module.params['con_ova_path'].startswith('http')):
+        if (requests.head(module.params['con_ova_path']).status_code != 200):
+                module.fail_json(msg='Controller OVA not found or readable from specified URL path')
+    else:
+        if (not os.path.isfile(module.params['con_ova_path']) or
+                not os.access(module.params['con_ova_path'], os.R_OK)):
+                module.fail_json(msg='Controller OVA not found or not readable')
 
     ovftool_exec = '%s/ovftool' % module.params['ovftool_path']
     ova_file = module.params['con_ova_path']
@@ -464,6 +509,12 @@ def main():
         task = vm.PowerOnVM_Task()
         wait_for_tasks(si, [task])
 
+    # Wait for controller to come up for given con_wait_time
+    controller_up = controller_wait(module.params['con_mgmt_ip'], module.params['round_wait'],
+                                    module.params['con_wait_time'])
+    if not controller_up:
+        return module.fail_json(
+            msg='Something wrong with the controller. The Controller is not in the up state.')
     return module.exit_json(changed=True, ova_tool_result=ova_tool_result)
 
 
