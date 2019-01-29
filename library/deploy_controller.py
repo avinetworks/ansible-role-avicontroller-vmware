@@ -405,8 +405,8 @@ def main():
 
     ovftool_exec = '%s/ovftool' % module.params['ovftool_path']
     ova_file = module.params['con_ova_path']
-    quoted_vcenter_user = urllib.quote(module.params['vcenter_user'])
-    quoted_vcenter_pass = urllib.quote(module.params['vcenter_password'])
+    quoted_vcenter_user = quote(module.params['vcenter_user'])
+    quoted_vcenter_pass = quote(module.params['vcenter_password'])
     vi_string = 'vi://%s:%s@%s' % (
         quoted_vcenter_user, quoted_vcenter_pass,
         module.params['vcenter_host'])
