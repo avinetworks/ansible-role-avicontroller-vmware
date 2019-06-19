@@ -1,29 +1,31 @@
 ---
+dist: trusty
+sudo: required
 language: python
-python: "2.7"
+services:
+  - docker
 
-# Use the new container infrastructure
-sudo: false
+before_install:
+  - sudo apt-get -qq update
 
-# Install ansible
-addons:
-  apt:
-    packages:
-      - python-pip
+env:
+  global:
+    - ROLE_NAME: avicontroller-vmware
+  matrix:
+    - MOLECULE_DISTRO: centos:7
+      MOLECULE_SERVICE_MANAGER: systemd
+      MOLECULE_COMMAND: /usr/sbin/init
 
 install:
-  # Install ansible
-  - pip install ansible
+  - pip install molecule docker
 
-  # Check ansible version
-  - ansible --version
-
-  # Create ansible.cfg with correct roles_path
-  - printf '[defaults]\nroles_path=../' >ansible.cfg
+before_script:
+  - cd ../
+  - mv ansible-role-$ROLE_NAME avinetworks.$ROLE_NAME
+  - cd avinetworks.$ROLE_NAME
 
 script:
-  # Basic role syntax check
-  - ansible-playbook tests/test.yml -i tests/inventory --syntax-check
+  - molecule test
 
 notifications:
   webhooks: https://galaxy.ansible.com/api/v1/notifications/
