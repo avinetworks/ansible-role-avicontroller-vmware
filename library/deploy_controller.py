@@ -1,5 +1,4 @@
 #!/usr/bin/python
-
 import atexit
 import json
 try:
@@ -10,8 +9,10 @@ import os
 import requests
 import time
 from pyVim.connect import SmartConnectNoSSL, Disconnect
+from pyVim.task import WaitForTasks
 from ansible.module_utils.basic import AnsibleModule
 from pyVmomi import vim, vmodl
+
 
 
 __author__ = 'chaitanyaavi'
@@ -201,6 +202,16 @@ def get_vm_ips(target_vm):
     return ip_address
 
 
+def get_vm_ip_by_network(target_vm, network):
+    ip_address = []
+    for nic in target_vm.guest.net:
+        if nic.network == network:
+            addresses = nic.ipConfig.ipAddress
+            for adr in addresses:
+                ip_address.append(adr.ipAddress)
+    return ip_address
+
+
 def is_update_cpu(module):
     return ('con_number_of_cpus' in module.params and
             module.params['con_number_of_cpus'] is not None)
@@ -239,7 +250,7 @@ def controller_wait(controller_ip, round_wait=10, wait_time=3600):
     """
     count = 0
     max_count = wait_time / round_wait
-    path = "http://" + str(controller_ip) + "/api/cluster/runtime"
+    path = "https://" + str(controller_ip) + "/api/cluster/runtime"
     ctrl_status = False
     r = None
     while True:
@@ -480,6 +491,8 @@ def main():
             msg='Failed to deploy OVA, error message from ovftool is: %s '
                 'for command %s' % (ova_tool_result[1], command_tokens))
 
+
+    vm = None
     if is_reconfigure_vm(module):
         vm = get_vm_by_name(si, module.params['con_vm_name'])
         cspec = vim.vm.ConfigSpec()
@@ -504,17 +517,35 @@ def main():
                 devSpec = vim.vm.device.VirtualDeviceSpec(
                     device=disk, operation="edit")
                 cspec.deviceChange.append(devSpec)
-        wait_for_tasks(si, [vm.Reconfigure(cspec)])
+        WaitForTasks([vm.Reconfigure(cspec)], si=si)
 
         task = vm.PowerOnVM_Task()
-        wait_for_tasks(si, [task])
+        WaitForTasks([task], si=si)
 
-    # Wait for controller to come up for given con_wait_time
-    controller_up = controller_wait(module.params['con_mgmt_ip'], module.params['round_wait'],
+    if not vm:
+        vm = get_vm_by_name(si, module.params['con_vm_name'])
+
+    if not module.params['con_mgmt_ip']:
+        interval = 15
+        timeout = 300
+        controller_ip = None
+        while timeout > 0:
+            controller_ip = get_vm_ip_by_network(vm, module.params['con_mgmt_network'])
+            if controller_ip:
+                controller_ip = controller_ip[0]
+                break
+            time.sleep(interval)
+            timeout -= interval
+    else:
+        controller_ip = module.params['con_mgmt_ip']
+
+    # Wait for controller tcontroller_waito come up for given con_wait_time
+    if controller_ip:
+        controller_up = controller_wait(controller_ip, module.params['round_wait'],
                                     module.params['con_wait_time'])
-    if not controller_up:
-        return module.fail_json(
-            msg='Something wrong with the controller. The Controller is not in the up state.')
+        if not controller_up:
+            return module.fail_json(
+                msg='Something wrong with the controller. The Controller is not in the up state.')
     return module.exit_json(changed=True, ova_tool_result=ova_tool_result)
 
 
