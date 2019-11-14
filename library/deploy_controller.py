@@ -421,7 +421,8 @@ def main():
     vi_string = 'vi://%s:%s@%s' % (
         quoted_vcenter_user, quoted_vcenter_pass,
         module.params['vcenter_host'])
-    vi_string += '/%s/host/%s' % (dc.name, cl.name)
+    vi_string += '/%s%s/%s' % (dc.name, compile_folder_path_for_object(cl),
+                               cl.name)
     command_tokens = [ovftool_exec]
 
     if module.params['con_power_on'] and not is_reconfigure_vm(module):
