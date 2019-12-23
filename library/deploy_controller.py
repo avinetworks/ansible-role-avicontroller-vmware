@@ -261,7 +261,6 @@ def controller_wait(controller_ip, round_wait=10, wait_time=3600):
             # Check for controller response for login URI.
             if r.status_code in (500, 502, 503) and count < max_count:
                 time.sleep(10)
-                count += 1
             else:
                 if r:
                     data = r.json()
@@ -272,6 +271,7 @@ def controller_wait(controller_ip, round_wait=10, wait_time=3600):
                             break
         except (requests.Timeout, requests.exceptions.ConnectionError) as e:
             pass
+        count += 1
     return ctrl_status
 
 
