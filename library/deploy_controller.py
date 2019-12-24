@@ -270,7 +270,7 @@ def controller_wait(controller_ip, round_wait=10, wait_time=3600):
                             ctrl_status = True
                             break
         except (requests.Timeout, requests.exceptions.ConnectionError) as e:
-            pass
+            time.sleep(10)
         count += 1
     return ctrl_status
 
