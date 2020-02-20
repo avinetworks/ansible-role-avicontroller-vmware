@@ -1,0 +1,8 @@
+---
+- name: Avi Controller | VMware | Requirements | Variables check
+  fail:
+    msg: "Not able to get the provided parameters please provide the valid parameters or try the same playbook by including the role"
+  when:
+    - vcenter_host is undefined
+    - vcenter_user is undefined
+    - vcenter_password is undefined

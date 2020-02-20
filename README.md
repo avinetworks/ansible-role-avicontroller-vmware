@@ -71,6 +71,35 @@ Including an example of how to use your role:
         con_power_on: true
         con_vcenter_folder: network/avi
 ```
+Example using including role [version parameter is required while including the role]
+```
+- hosts: localhost
+  connection: local
+  tasks:
+    - name: Avi Controller | Vmware | Configure VMware controller
+      include_role:
+        name: avinetworks.avicontroller_vmware
+      vars:
+        ovftool_path: /usr/bin/
+        vcenter_host: '{{ vcenter_host }}'
+        vcenter_user: '{{ vcenter_user }}'
+        vcenter_password: '{{ vcenter_password }}'
+        version: v2
+        con_datacenter: '{{ con_datacenter }}'
+        con_cluster: '{{ con_cluster }}'
+        con_mgmt_network: '{{ con_mgmt_network }}'
+        con_ova_path: ./controller.ova
+        con_vm_name: ansible_ctr
+        con_power_on: false
+        con_number_of_cpus: 8
+        con_memory: 30720
+        con_cpu_reserved: 1028
+        con_memory_reserved: 2048
+        con_disk_size: 128
+        con_vcenter_folder: /folder/path
+        state: present
+        con_datastore: '{{ con_datastore }}'
+```
 
 License
 -------
@@ -81,5 +110,3 @@ Author Information
 ------------------
 
 contact: Avi Networks [avi-sdk@avinetworks.com]
-
-
