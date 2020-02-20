@@ -383,6 +383,51 @@ def main():
                 task = vm.PowerOnVM_Task()
                 wait_for_tasks(si, [task])
             changed = True
+        if is_reconfigure_vm(module):
+            vm = get_vm_by_name(si, module.params['con_vm_name'])
+            if not check_mode:
+                if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
+                    task = vm.PowerOffVM_Task()
+                    wait_for_tasks(si, [task])
+                vm = get_vm_by_name(si, module.params['con_vm_name'])
+                vmSummary = vm.summary.config
+                cspec = vim.vm.ConfigSpec()
+                if is_update_cpu(module):
+                    if vmSummary.numCpu != module.params['con_number_of_cpus']:
+                        cspec.numCPUs = module.params['con_number_of_cpus']
+                        changed = True
+                if is_update_memory(module):
+                    if vmSummary.memorySizeMB != module.params['con_memory']:
+                        cspec.memoryMB = module.params['con_memory']
+                        changed = True
+                if is_reserve_memory(module):
+                    if vmSummary.memoryReservation != module.params['con_memory_reserved']:
+                        cspec.memoryAllocation = vim.ResourceAllocationInfo(
+                            reservation=module.params['con_memory_reserved'])
+                        changed = True
+                if is_reserve_cpu(module):
+                    if vmSummary.cpuReservation != module.params['con_cpu_reserved']:
+                        cspec.cpuAllocation = vim.ResourceAllocationInfo(
+                            reservation=module.params['con_cpu_reserved'])
+                        changed = True
+                if is_resize_disk(module):
+                    disk = None
+                    for device in vm.config.hardware.device:
+                        if isinstance(device, vim.vm.device.VirtualDisk):
+                            disk = device
+                            break
+                    if disk is not None:
+                        if disk.capacityInKB != module.params['con_disk_size'] * 1024 * 1024:
+                            disk.capacityInKB = module.params['con_disk_size'] * 1024 * 1024
+                            devSpec = vim.vm.device.VirtualDeviceSpec(
+                                device=disk, operation="edit")
+                            cspec.deviceChange.append(devSpec)
+                            changed = True
+                wait_for_tasks(si, [vm.Reconfigure(cspec)])
+
+                if module.params['con_power_on']:
+                    task = vm.PowerOnVM_Task()
+                    WaitForTasks([task], si=si)
 
         if module.params.get('con_datastore', None):
             ds_names = []
@@ -492,40 +537,7 @@ def main():
             msg='Failed to deploy OVA, error message from ovftool is: %s '
                 'for command %s' % (ova_tool_result[1], command_tokens))
 
-
-    vm = None
-    if is_reconfigure_vm(module):
-        vm = get_vm_by_name(si, module.params['con_vm_name'])
-        cspec = vim.vm.ConfigSpec()
-        if is_update_cpu(module):
-            cspec.numCPUs = module.params['con_number_of_cpus']
-        if is_update_memory(module):
-            cspec.memoryMB = module.params['con_memory']
-        if is_reserve_memory(module):
-            cspec.memoryAllocation = vim.ResourceAllocationInfo(
-                reservation=module.params['con_memory_reserved'])
-        if is_reserve_cpu(module):
-            cspec.cpuAllocation = vim.ResourceAllocationInfo(
-                reservation=module.params['con_cpu_reserved'])
-        if is_resize_disk(module):
-            disk = None
-            for device in vm.config.hardware.device:
-                if isinstance(device, vim.vm.device.VirtualDisk):
-                    disk = device
-                    break
-            if disk is not None:
-                disk.capacityInKB = module.params['con_disk_size'] * 1024 * 1024
-                devSpec = vim.vm.device.VirtualDeviceSpec(
-                    device=disk, operation="edit")
-                cspec.deviceChange.append(devSpec)
-        WaitForTasks([vm.Reconfigure(cspec)], si=si)
-
-        task = vm.PowerOnVM_Task()
-        WaitForTasks([task], si=si)
-
-    if not vm:
-        vm = get_vm_by_name(si, module.params['con_vm_name'])
-
+    vm = get_vm_by_name(si, module.params['con_vm_name'])
     if not module.params['con_mgmt_ip']:
         interval = 15
         timeout = 300
