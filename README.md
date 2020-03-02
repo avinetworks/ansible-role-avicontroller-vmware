@@ -84,7 +84,6 @@ Example using including role [version parameter is required while including the 
         vcenter_host: '{{ vcenter_host }}'
         vcenter_user: '{{ vcenter_user }}'
         vcenter_password: '{{ vcenter_password }}'
-        version: v2
         con_datacenter: '{{ con_datacenter }}'
         con_cluster: '{{ con_cluster }}'
         con_mgmt_network: '{{ con_mgmt_network }}'
