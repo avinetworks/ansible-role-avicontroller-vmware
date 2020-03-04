@@ -10,7 +10,7 @@
 
 - name: Avi Controller | VMware | Set Execution Flow
   set_fact:
-    include_true: true
+    run_deploy_module: true
   when:
     - vcenter_host is defined
     - vcenter_user is defined
@@ -48,5 +48,5 @@
     con_disk_size: "{{ con_disk_size | default(omit) }}"
     con_ovf_properties: "{{ con_ovf_properties | default(omit) }}"
   delegate_to: localhost
-  when: include_true is defined
+  when: run_deploy_module is defined
 
