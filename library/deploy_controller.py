@@ -396,6 +396,58 @@ def main():
             if (ip_addresses and
                     not module.params['con_mgmt_ip'] in ip_addresses):
                 module.fail_json(msg='VM static ip address cant be modified')
+
+        if is_reconfigure_vm(module):
+            if not check_mode:
+                vmSummary = vm.summary.config
+                cspec = vim.vm.ConfigSpec()
+
+                if is_resize_disk(module):
+                    disk = None
+                    for device in vm.config.hardware.device:
+                        if isinstance(device, vim.vm.device.VirtualDisk):
+                            disk = device
+                            break
+
+                if vmSummary.numCpu != module.params['con_number_of_cpus'] or \
+                        vmSummary.memorySizeMB != module.params['con_memory'] or \
+                        vmSummary.memoryReservation != module.params['con_memory_reserved'] or \
+                        vmSummary.cpuReservation != module.params['con_cpu_reserved'] or \
+                        (disk is not None and disk.capacityInKB != module.params['con_disk_size'] * 1024 * 1024):
+                    if vm.runtime.powerState == vim.VirtualMachinePowerState.poweredOn:
+                        task = vm.PowerOffVM_Task()
+                        wait_for_tasks(si, [task])
+                    if is_update_cpu(module):
+                        if vmSummary.numCpu != module.params['con_number_of_cpus']:
+                            cspec.numCPUs = module.params['con_number_of_cpus']
+                            changed = True
+                    if is_update_memory(module):
+                        if vmSummary.memorySizeMB != module.params['con_memory']:
+                            cspec.memoryMB = module.params['con_memory']
+                            changed = True
+                    if is_reserve_memory(module):
+                        if vmSummary.memoryReservation != module.params['con_memory_reserved']:
+                            cspec.memoryAllocation = vim.ResourceAllocationInfo(
+                                reservation=module.params['con_memory_reserved'])
+                            changed = True
+                    if is_reserve_cpu(module):
+                        if vmSummary.cpuReservation != module.params['con_cpu_reserved']:
+                            cspec.cpuAllocation = vim.ResourceAllocationInfo(
+                                reservation=module.params['con_cpu_reserved'])
+                            changed = True
+                    if is_resize_disk(module):
+                        if disk.capacityInKB != module.params['con_disk_size'] * 1024 * 1024:
+                            disk.capacityInKB = module.params['con_disk_size'] * 1024 * 1024
+                            devSpec = vim.vm.device.VirtualDeviceSpec(
+                                device=disk, operation="edit")
+                            cspec.deviceChange.append(devSpec)
+                            changed = True
+                    WaitForTasks([vm.Reconfigure(cspec)], si=si)
+
+                    if module.params['con_power_on']:
+                        task = vm.PowerOnVM_Task()
+                        WaitForTasks([task], si=si)
+
         if changed and not check_mode:
             module.exit_json(msg='A VM with the name %s updated successfully' %
                                  (module.params['con_vm_name']), changed=True)
