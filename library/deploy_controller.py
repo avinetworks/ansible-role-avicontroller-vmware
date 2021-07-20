@@ -140,12 +140,12 @@ options:
 EXAMPLES = """
 - hosts: localhost
   connection: local
+  collections:
+    - vmware.alb
   tasks:
     - import_role:
-        name: vmware.alb.avicontroller_vmware
-
-    - name: Deploy Avi Controller
-      vmware.alb.deploy_controller:
+        name: avicontroller_vmware
+      vars:
         ovftool_path: /usr/lib/vmware-ovftool
         vcenter_host: '{{ vcenter_host }}'
         vcenter_user: '{{ vcenter_user }}'
@@ -158,13 +158,6 @@ EXAMPLES = """
         con_power_on: true
         con_vcenter_folder: network/avi
 """
-
-RETURN = '''
-obj:
-    description: ActionGroupConfig (api/actiongroupconfig) object
-    returned: success, changed
-    type: dict
-'''
 
 from ansible.module_utils.basic import AnsibleModule
 try:
