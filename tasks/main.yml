@@ -49,4 +49,3 @@
     con_ovf_properties: "{{ con_ovf_properties | default(omit) }}"
   delegate_to: localhost
   when: run_deploy_module is defined
-

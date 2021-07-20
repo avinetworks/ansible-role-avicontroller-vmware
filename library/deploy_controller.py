@@ -1,26 +1,192 @@
 #!/usr/bin/python
-import atexit
-import json
-try:
-    from urllib import quote
-except ImportError:
-    from urllib.parse import quote
-import os
-import requests
-import time
-from pyVim.connect import SmartConnectNoSSL, Disconnect
-from pyVim.task import WaitForTasks
+# Copyright 2021 VMware, Inc.  All rights reserved. VMware Confidential
+# SPDX-License-Identifier: Apache License 2.0
+
+DOCUMENTATION = '''
+---
+module: deploy_controller
+author: chaitanyaavi (@chaitanyaavi) <chaitanya.deshpande@avinetworks.com>
+
+short_description: Module is to deploy vm on vcenter
+description:
+    - This module is used to deploy Vm
+
+options:
+    state:
+        description:
+            - The state that should be applied on the entity.
+        default: present
+        choices: ["absent", "present"]
+        type: str
+    ovftool_path:
+        description:
+            - Path of the ovftool where it is installed.
+        required: true
+        type: str
+    vcenter_host:
+        description:
+            - Host name or IP of the Vcenter.
+        required: true
+        type: str
+    vcenter_user:
+        description:
+            - Username of the Vcenter.
+        required: true
+        type: str
+    vcenter_password:
+        description:
+            - Password of the Vcenter.
+        required: true
+        type: str
+    ssl_verify:
+        description:
+            - Flag to set ssl Verification while deploying the VM.
+        default: false
+        type: bool
+    con_datacenter:
+        description:
+            - Destination datacenter for the deploy operation.
+        type: str
+    con_cluster:
+        description:
+            - The cluster name where the virtual machine will run.
+        type: str
+    con_datastore:
+        description:
+            - Datastore to provision virtual machine.
+        type: str
+    con_mgmt_network:
+        description:
+            - Name of the object.
+        required: true
+        type: str
+    con_disk_mode:
+        description:
+            - Type of disk mode.
+        default: thin
+        choices: ["thin", "thick", "eagerzeroedthick"]
+        type: str
+    con_ova_path:
+        description:
+            - OVF template path to deploy VM using that.
+        required: true
+        type: str
+    con_vm_name:
+        description:
+            - Name of the virtual machine.
+        required: true
+        type: str
+    con_power_on:
+        description:
+            - State of the virtual machine to power on and power off.
+        default: true
+        type: bool
+    con_vcenter_folder:
+        description:
+            - Destination folder, absolute path to find an existing VM or create the new VM.
+        type: str
+    con_mgmt_ip:
+        description:
+            - Static IP address.
+        type: str
+    con_mgmt_mask:
+        description:
+            - Static netmask required for con_mgmt_ip.
+        type: str
+    con_default_gw:
+        description:
+            - Getway for the con_mgmt_ip.
+        type: str
+    con_sysadmin_public_key:
+        description:
+            - File path of sysadmin public key file.
+        type: str
+    con_number_of_cpus:
+        description:
+            - Number of CPUs.
+        type: int
+    con_cpu_reserved:
+        description:
+            - Number of CPUs to be reserved.
+        type: int
+    con_memory:
+        description:
+            - Amount of memory in MB.
+        type: int
+    con_memory_reserved:
+        description:
+            - Amount of memory to be reserved.
+        type: int
+    con_disk_size:
+        description:
+            - Disk storage size in gb.
+        type: int
+    con_ovf_properties:
+        description:
+            - Object of ovf properties.
+        type: dict
+    con_wait_time:
+        description:
+            - Define a timeout (in seconds) to wait for Ip address.
+        default: 3600
+        type: int
+    round_wait:
+        description:
+            - Round wait to wait for given rounds.
+        default: 10
+        type: int
+'''
+
+EXAMPLES = """
+- hosts: localhost
+  connection: local
+  tasks:
+    - import_role:
+        name: vmware.alb.avicontroller_vmware
+
+    - name: Deploy Avi Controller
+      vmware.alb.deploy_controller:
+        ovftool_path: /usr/lib/vmware-ovftool
+        vcenter_host: '{{ vcenter_host }}'
+        vcenter_user: '{{ vcenter_user }}'
+        vcenter_password: '{{ vcenter_password }}'
+        con_datacenter: 10GTest
+        con_cluster: Arista
+        con_mgmt_network: Mgmt_Ntwk_3
+        con_ova_path: ./controller.ova
+        con_vm_name: ansible-test-controller
+        con_power_on: true
+        con_vcenter_folder: network/avi
+"""
+
+RETURN = '''
+obj:
+    description: ActionGroupConfig (api/actiongroupconfig) object
+    returned: success, changed
+    type: dict
+'''
+
 from ansible.module_utils.basic import AnsibleModule
-from pyVmomi import vim, vmodl
-
-
-
-__author__ = 'chaitanyaavi'
+try:
+    import atexit
+    import json
+    try:
+        from urllib import quote
+    except ImportError:
+        from urllib.parse import quote
+    import os
+    import requests
+    import time
+    from pyVim.connect import SmartConnectNoSSL, Disconnect
+    from pyVim.task import WaitForTasks
+    from pyVmomi import vim, vmodl
+    HAS_IMPORT = True
+except ImportError as e:
+    HAS_IMPORT = False
 
 
 def is_vm_exist(si, cl, vm_name):
-    container = si.content.viewManager.CreateContainerView(
-         cl, [vim.VirtualMachine], True)
+    container = si.content.viewManager.CreateContainerView(cl, [vim.VirtualMachine], True)
     for managed_object_ref in container.view:
         if managed_object_ref.name == vm_name:
             return True
@@ -28,8 +194,8 @@ def is_vm_exist(si, cl, vm_name):
 
 
 def get_vm_by_name(si, vm_name):
-    container = si.content.viewManager.CreateContainerView(
-        si.content.rootFolder, [vim.VirtualMachine], True)
+    container = si.content.viewManager.CreateContainerView(si.content.rootFolder,
+                                                           [vim.VirtualMachine], True)
     for vm in container.view:
         if vm.name == vm_name:
             return vm
@@ -239,7 +405,7 @@ def is_resize_disk(module):
 
 def is_reconfigure_vm(module):
     return (is_update_cpu(module) or is_update_memory(module) or
-            is_reserve_memory(module)or is_reserve_cpu(module) or
+            is_reserve_memory(module) or is_reserve_cpu(module) or
             is_resize_disk(module))
 
 
@@ -283,12 +449,13 @@ def main():
             vcenter_user=dict(required=True, type='str'),
             vcenter_password=dict(required=True, type='str', no_log=True),
             ssl_verify=dict(required=False, type='bool', default=False),
-            state=dict(required=False, type='str', default='present'),
+            state=dict(required=False, type='str', default='present', choices=['absent', 'present']),
             con_datacenter=dict(required=False, type='str'),
             con_cluster=dict(required=False, type='str'),
             con_datastore=dict(required=False, type='str'),
             con_mgmt_network=dict(required=True, type='str'),
-            con_disk_mode=dict(required=False, type='str', default='thin'),
+            con_disk_mode=dict(required=False, type='str', default='thin',
+                               choices=['thin', 'thick', 'eagerzeroedthick']),
             con_ova_path=dict(required=True, type='str'),
             con_vm_name=dict(required=True, type='str'),
             con_power_on=dict(required=False, type='bool', default=True),
@@ -310,6 +477,9 @@ def main():
         ),
         supports_check_mode=True,
     )
+    if not HAS_IMPORT:
+        return module.fail_json(msg=(
+            'Some of the python package is not installed. please check %s' % (e)))
     try:
         si = SmartConnectNoSSL(host=module.params['vcenter_host'],
                                user=module.params['vcenter_user'],
@@ -460,11 +630,11 @@ def main():
 
     if (module.params['con_ova_path'].startswith('http')):
         if (requests.head(module.params['con_ova_path']).status_code != 200):
-                module.fail_json(msg='Controller OVA not found or readable from specified URL path')
+            module.fail_json(msg='Controller OVA not found or readable from specified URL path')
     else:
         if (not os.path.isfile(module.params['con_ova_path']) or
                 not os.access(module.params['con_ova_path'], os.R_OK)):
-                module.fail_json(msg='Controller OVA not found or not readable')
+            module.fail_json(msg='Controller OVA not found or not readable')
 
     ovftool_exec = '%s/ovftool' % module.params['ovftool_path']
     ova_file = module.params['con_ova_path']
@@ -495,15 +665,15 @@ def main():
     if ('ovf_network_name' in module.params.keys() and
             module.params['ovf_network_name'] is not None and
             len(module.params['ovf_network_name']) > 0):
-            try:
-                d = json.loads(
-                    module.params['ovf_network_name'].replace("'", "\""))
-                for key, network_item in d.iteritems():
-                    command_tokens.append('--net:%s=%s' % (key, network_item))
-            except ValueError:
-                command_tokens.append('--net:%s=%s' % (
-                    module.params['ovf_network_name'],
-                    module.params['con_mgmt_network']))
+        try:
+            d = json.loads(
+                module.params['ovf_network_name'].replace("'", "\""))
+            for key, network_item in d.items():
+                command_tokens.append('--net:%s=%s' % (key, network_item))
+        except ValueError:
+            command_tokens.append('--net:%s=%s' % (
+                module.params['ovf_network_name'],
+                module.params['con_mgmt_network']))
     else:
         command_tokens.append(
             '--network=%s' % module.params['con_mgmt_network'])
@@ -543,7 +713,6 @@ def main():
         return module.fail_json(
             msg='Failed to deploy OVA, error message from ovftool is: %s '
                 'for command %s' % (ova_tool_result[1], command_tokens))
-
 
     vm = None
     if is_reconfigure_vm(module):
@@ -595,7 +764,7 @@ def main():
     # Wait for controller tcontroller_waito come up for given con_wait_time
     if controller_ip:
         controller_up = controller_wait(controller_ip, module.params['round_wait'],
-                                    module.params['con_wait_time'])
+                                        module.params['con_wait_time'])
         if not controller_up:
             return module.fail_json(
                 msg='Something wrong with the controller. The Controller is not in the up state.')
