@@ -1,4 +1,5 @@
-# avinetworks.avicontroller-vmware
+**⛔️ DEPRECATED: This repo is no longer supported, please consider using** https://github.com/vmware/ansible-collection-alb **instead since**
+ **this role is migrated to ansible collections.**
 
 Using this module you are able to install the Avi Vantage Controlller, to Vmware cloud.
 
